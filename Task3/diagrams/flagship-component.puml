@@ -1,0 +1,39 @@
+@startuml
+!pragma layout smetana
+!define RELATIVE_INCLUDE
+!include ../../vendor/C4-PlantUML/C4_Component.puml
+LAYOUT_TOP_DOWN()
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 12
+skinparam wrapWidth 200
+skinparam nodesep 35
+skinparam ranksep 45
+AddBoundaryTag("trust", $borderColor="#A65B29", $borderStyle=DashedLine())
+
+title RetailBank — Ranking Worker / C4 Component
+ContainerQueue(jobs,"Job Queue","RabbitMQ","Durable job / retry")
+ContainerDb(features,"Analytical Store","PostgreSQL","Pinned features / evidence refs")
+ContainerDb(cases,"Case Store","PostgreSQL","Recommendations / result outbox")
+Boundary(artifactzone,"TB3 · Approved artifacts",$tags="trust") {
+ ContainerDb(registry,"Model Registry","Object storage","Signed model + schema + normalizer")
+}
+Container_Boundary(worker,"Ranking Worker · один deployable container") {
+ Component(intake,"Job intake / idempotency","Code","Unique job key, ACK after commit")
+ Component(gate,"Feature gate","Code","Missing / stale / cold-start / OOD")
+ Component(model,"Model adapter","Learned CPU model","Isolation Forest candidate")
+ Component(normalizer,"Score normalizer","Code","Segment percentile, не probability")
+ Component(policy,"Policy validator","Code","Schema, rule precedence, abstain")
+ Component(writer,"Evidence & result writer","Code","Source facts, versions, durable result")
+}
+Rel(jobs,intake,"Job","AMQP")
+Rel(intake,gate,"Validated identity")
+Rel(features,gate,"Snapshot + segment metadata","SQL read")
+Rel(gate,model,"Eligible features")
+Rel(gate,policy,"Ineligible → fallback reason")
+Rel(registry,model,"Verified bundle","Read only")
+Rel(model,normalizer,"Raw anomaly score")
+Rel(normalizer,policy,"Percentile or abstain")
+Rel(policy,writer,"Validated recommendation")
+Rel(writer,cases,"Idempotent commit","SQL")
+SHOW_LEGEND()
+@enduml

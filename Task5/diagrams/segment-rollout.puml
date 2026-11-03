@@ -1,0 +1,48 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+title RetailBank — новый сегмент: диагностика и контролируемый rollout
+actor "Финмониторинг /\nML validation" as owner
+participant "Monitoring +\ncoverage registry" as mon
+participant "Feature / source\nsnapshots" as data
+participant "Offline evaluation" as eval
+participant "Signed deployment\nmanifest" as registry
+participant "Ranking / Queue" as live
+mon -> owner : Новый сегмент / OOD / yield или label lag
+owner -> live : Sellers → rules + deadline / age
+note right of live
+Mandatory review продолжается.
+Unknown segment ≠ low risk.
+end note
+owner -> data : Reconcile schema / units / IDs / available_at
+owner -> eval : Audit selection / maturity / guide
+data -> eval : Frozen matched cohorts + probability sample
+eval -> eval : H1–H8 tests / feature ablations
+alt Pipeline / labels defect
+ eval --> owner : Причина в данных / оценке
+ owner -> data : Исправить source mapping / guide
+else Segment behavior shift подтверждён
+ eval -> eval : Segment features / normalizer candidate
+end
+eval -> eval : Old + sellers regression / safety gates
+alt Нет доказанного преимущества / gate failure
+ eval --> owner : Не продвигать; оставить fallback
+else Gates пройдены
+ owner -> registry : Approve compatible bundle\nmodel + features + segment + policy
+ registry -> live : Shadow без влияния на queue
+ live --> mon : Versions / quality / quotas / deadlines
+ owner -> registry : Canary 5% → 25% → 100% client-clusters\nтолько после window / evidence gates
+ registry -> live : Atomic routing manifest
+ opt Guardrail breach / regression
+  mon -> owner : Stop / incident evidence
+  owner -> registry : Previous compatible bundle\nили deterministic fallback
+  registry -> live : Rollback route, invalidate cached scores
+  live --> owner : Verify workers / in-flight / queue ordering
+ end
+end
+note over owner, live
+Human actions не откатываются; recommendations сохраняют версии.
+Raw metrics и новые labels не вызывают auto-promotion.
+end note
+@enduml

@@ -1,0 +1,52 @@
+@startuml
+!pragma layout smetana
+!define RELATIVE_INCLUDE
+!include ../../vendor/C4-PlantUML/C4_Container.puml
+LAYOUT_TOP_DOWN()
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 12
+skinparam wrapWidth 200
+skinparam nodesep 35
+skinparam ranksep 45
+AddBoundaryTag("trust", $borderColor="#A65B29", $borderStyle=DashedLine())
+
+title RetailBank — приоритизация финмониторинга / C4 Container
+Boundary(sourcezone, "TB1 · Источники банка", $tags="trust") {
+ System_Ext(core, "Core / analytical export", "Операции и разрешённые справочники")
+ System_Ext(legacy, "Rules / Case management", "РВК, mandatory flags, исходы")
+}
+Boundary(humanzone, "TB2 · Рабочее место", $tags="trust") {
+ Person(analyst, "Финмониторинг", "Проверяет факты и принимает решение")
+}
+System_Boundary(service, "Сервис приоритизации · on-prem") {
+ Container(capture, "Capture & Feature Builder", "SQL / Python", "Point-in-time окна, DQ, manifests")
+ ContainerDb(features, "Analytical Store", "PostgreSQL + object storage", "Recent features, input snapshots")
+ ContainerQueue(jobs, "Job Queue", "RabbitMQ / outbox", "Durable jobs, retry, DLQ")
+ Container(worker, "Ranking Worker", "Python / CPU model", "Gate → score → policy validation")
+ Container(review, "Review API & UI", "HTTP / web", "Merge queues, human review, audit")
+ ContainerDb(cases, "Case Store", "PostgreSQL HA", "Deadlines, leases, labels, recommendations")
+ Boundary(artifacts, "TB3 · Offline evaluation / signed artifacts", $tags="trust") {
+  Container(train, "Training & Evaluation", "Python / jobs", "Probability sample, blind tests")
+  ContainerDb(registry, "Model Registry", "Object storage / metadata", "Approved versioned bundles")
+ }
+ Container(mon, "Monitoring", "Metrics / alerts", "Inputs, segment, model, queue, business")
+}
+Rel(core,capture,"Committed changes / export","mTLS / batch")
+Rel(legacy,capture,"Flags / outcomes / source refs","Read API / batch")
+Rel(capture,features,"Versioned features","SQL / object API")
+Rel(capture,cases,"Baseline cases / deadlines / sample","SQL + job outbox")
+Rel(capture,jobs,"Jobs after durable commit","Outbox / AMQP")
+Rel(jobs,worker,"Lease / at-least-once","AMQP")
+Rel(worker,features,"Pinned snapshot","SQL read")
+Rel(worker,cases,"Validated recommendations","SQL / outbox")
+Rel(review,cases,"Queue / review outcomes","SQL")
+Rel(analyst,review,"Review / authorised actions","HTTPS / SSO")
+Rel(review,legacy,"Human-approved workflow action","Internal API")
+Rel(cases,train,"Labels + selection probabilities","Read snapshot")
+Rel(features,train,"Point-in-time datasets","Read snapshot")
+Rel(train,registry,"Tests + approval evidence","Artifact API")
+Rel(registry,worker,"Signed bundle / supported segments","Read only")
+Rel(worker,mon,"Score / fallback / version","Metrics")
+Rel(review,mon,"Age / quotas / outcomes","Metrics")
+SHOW_LEGEND()
+@enduml
