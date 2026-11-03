@@ -1,0 +1,44 @@
+@startuml
+!pragma layout smetana
+!define RELATIVE_INCLUDE
+!include ../../vendor/C4-PlantUML/C4_Container.puml
+LAYOUT_TOP_DOWN()
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 12
+skinparam wrapWidth 200
+skinparam nodesep 35
+skinparam ranksep 45
+AddBoundaryTag("trust", $borderColor="#A65B29", $borderStyle=DashedLine())
+
+title RetailBank — финансовые показатели / C4 Container
+System_Ext(documents,"Document / OCR service","Версии страниц, таблиц и источников")
+System_Ext(credit,"Credit application system","Получает только approved fields")
+Boundary(humanzone,"TB2 · Рабочее место",$tags="trust") {
+ Person(underwriter,"Андеррайтер","Проверяет числа, периоды и источники")
+}
+System_Boundary(extract,"Извлечение показателей · on-prem") {
+ Container(orchestrator,"Extraction Orchestrator","Code / async jobs","Parser first, context selection, quotas")
+ ContainerDb(dictionary,"Metric Dictionary","Versioned data","Показатели, единицы, допустимые периоды")
+ Boundary(modelzone,"TB5 · Недоверенный контекст / model runtime",$tags="trust") {
+  Container(model,"Local Extraction Model","Qwen candidate / isolated runtime","Bounded JSON candidates; no tools")
+ }
+ Container(validator,"Validation Service","Deterministic code","Schema, evidence, units, math, conflicts")
+ ContainerDb(results,"Candidate / Audit Store","PostgreSQL","Versions, conflicts, human approvals")
+ Container(ui,"Review API & UI","Web / application API","Source highlight, explicit confirmation")
+ Boundary(artifactzone,"TB3 · Signed artifacts",$tags="trust") {
+  ContainerDb(registry,"Model / Prompt Registry","Artifact store","Pinned bundles + test evidence")
+ }
+}
+Rel(documents,orchestrator,"Current application only","Scoped read API")
+Rel(dictionary,orchestrator,"Allowlisted metric definitions")
+Rel(orchestrator,model,"Selected pages / evidence IDs","Private API")
+Rel(orchestrator,validator,"Deterministic parser candidates")
+Rel(model,validator,"Untrusted JSON candidates","Private API")
+Rel(registry,model,"Approved bundle")
+Rel(validator,documents,"Resolve source evidence","Scoped read API")
+Rel(validator,results,"Candidate / missing / conflict")
+Rel(underwriter,ui,"Review and sign-off","HTTPS / SSO")
+Rel(ui,results,"Read / append approval")
+Rel(ui,credit,"Human-approved values","Restricted application API")
+SHOW_LEGEND()
+@enduml

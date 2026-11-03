@@ -1,0 +1,44 @@
+@startuml
+!pragma layout smetana
+!define RELATIVE_INCLUDE
+!include ../../vendor/C4-PlantUML/C4_Container.puml
+LAYOUT_TOP_DOWN()
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 12
+skinparam wrapWidth 200
+skinparam nodesep 35
+skinparam ranksep 45
+AddBoundaryTag("trust", $borderColor="#A65B29", $borderStyle=DashedLine())
+
+title RetailBank — OCR / C4 Container
+Boundary(clientzone,"TB4 · Недоверенный вход",$tags="trust") {
+ Person_Ext(client,"Заявитель","PDF / Excel / фото")
+}
+Boundary(humanzone,"TB2 · Рабочее место",$tags="trust") {
+ Person(underwriter,"Оператор / андеррайтер","Проверяет текст рядом с оригиналом")
+}
+System_Boundary(ocr,"OCR документов · on-prem") {
+ Container(intake,"Document Intake","API","Application ACL, hash, file limits")
+ Container(sandbox,"File Sandbox","Isolated workers","AV, render, no macros, native text check")
+ ContainerQueue(jobs,"OCR Jobs","Broker / outbox","Retries, leases, DLQ")
+ Container(worker,"OCR Worker","Local CPU engine","Tesseract / PaddleOCR candidates")
+ ContainerDb(store,"Document & OCR Store","Object storage + PostgreSQL","Originals, pages, tokens, corrections")
+ Container(ui,"Review API & UI","Web / API","Original + boxes + corrections")
+ Boundary(artifactzone,"TB3 · Signed artifacts",$tags="trust") {
+  ContainerDb(registry,"Model Registry","Artifact store","Pinned engine / weights / schema")
+ }
+}
+System_Ext(extraction,"№18 Extraction","Consumer of versioned text/layout")
+Rel(client,intake,"Upload","HTTPS")
+Rel(intake,store,"Immutable original / metadata","Object API")
+Rel(intake,sandbox,"Isolated processing job")
+Rel(sandbox,jobs,"Safe pages / refs","AMQP")
+Rel(jobs,worker,"OCR job","AMQP")
+Rel(registry,worker,"Verified engine bundle")
+Rel(worker,store,"Tokens / geometry / warnings")
+Rel(sandbox,store,"Validated native text / page refs")
+Rel(underwriter,ui,"Review / correction","HTTPS / SSO")
+Rel(ui,store,"Read / append correction","API / SQL")
+Rel(store,extraction,"Versioned OCR / evidence IDs","Scoped read API")
+SHOW_LEGEND()
+@enduml
